@@ -631,7 +631,7 @@ import { setAndroidAppActive, setAndroidAppVisible } from './helpers/appVisibili
 import { initializeShimmerVisibility } from './helpers/shimmerVisibility.js'
 import { createAppShortcuts, getAppShortcutPath } from './helpers/appShortcuts'
 import { getHomeWidgetPage } from './helpers/homeWidgetData'
-import { syncContinueWatchingWidget } from './helpers/homeWidgets'
+import { syncHomeWidgets } from './helpers/homeWidgets'
 import { AppShortcuts } from '@capawesome/capacitor-app-shortcuts'
 import { playbackScreenWake } from './helpers/playbackScreenWake'
 import { FtIcon } from '@opentubex/icons'
@@ -2727,6 +2727,15 @@ function playDownloadedVideoFromCommandPalette(id, file) {
   })
 }
 
+function playDownloadFromHomeWidget(id) {
+  return playDownloadedFile(id, null, {
+    refreshDownloads: () => refreshDownloadRecords(ytDlp, store),
+    playNative: (id, path) => ytDlp.ytDlpPlayDownload(id, path),
+    navigate: openInternalPath,
+    fileNotFound: () => showToast({ message: t('Downloads.File Not Found'), icon: ['fas', 'circle-exclamation'] }),
+  })
+}
+
 function goHistoryFromCommandPalette(offset) {
   if (usesLogicalTabs) {
     return navigation.go(presentedTabId.value, offset)
@@ -4452,7 +4461,15 @@ async function enableCapacitorIntegrations() {
     }
     const widgetPage = getHomeWidgetPage(url)
     if (widgetPage) {
+      if (widgetPage.route?.settings) {
+        if (supportsYtDlp) await store.dispatch('showSettingsWindow', widgetPage.route.settings)
+        return
+      }
       await store.dispatch('hideSettingsWindow')
+      if (widgetPage.downloadId !== undefined) {
+        if (supportsYtDlp) await playDownloadFromHomeWidget(widgetPage.downloadId)
+        return
+      }
       if (widgetPage.route) return openInternalPath(widgetPage.route)
       const focusSearch = () => {
         if (document.getElementById('app')?.inert) {
@@ -4526,7 +4543,7 @@ async function enableCapacitorIntegrations() {
     })
     AppShortcuts.set({ shortcuts: supportsYtDlp ? shortcuts : shortcuts.filter(shortcut => shortcut.id !== 'downloads') }).catch(error => console.error('Failed to update app shortcuts', error))
   }, { immediate: true })
-  const stopHomeWidgetUpdates = syncContinueWatchingWidget(store, watch)
+  const stopHomeWidgetUpdates = syncHomeWidgets(store, watch)
   const removeReminderActions = await initializeCapacitorLiveReminderActions((videoId) => {
     handleYoutubeLink(`https://www.youtube.com/watch?v=${videoId}`)
   }, showInAppNotification)
